@@ -1,0 +1,39 @@
+{
+  "mcpServers": {
+    "gwQOwcM6TiVV8czHpiFex": {
+      "name": "MCP Server",
+      "description": "Default MCP server",
+      "baseUrl": "http://127.0.0.1:8000/mcp",
+      "isActive": false,
+      "type": "streamableHttp"
+    },
+    "h1VR84Jw_TSny-1UMl0gm": {
+      "name": "股票数据MCP",
+      "description": "Stock data MCP server",
+      "baseUrl": "https://mcp.alphavantage.co/mcp?apikey=YOUR_API_KEY",
+      "isActive": false,
+      "type": "streamableHttp"
+    },
+    "JhlWVfUBKUWk6CYPyzOuz": {
+      "name": "news mcp",
+      "description": "News MCP server",
+      "baseUrl": "http://172.20.0.4:3333/mcp",
+      "isActive": false,
+      "type": "streamableHttp"
+    },
+    "NVmD2ihPqcCh0ygrrrTp0": {
+      "name": "xiaohongshu-MCP-Server",
+      "description": "Xiaohongshu MCP server",
+      "baseUrl": "http://127.0.0.1:18060/mcp",
+      "isActive": false,
+      "type": "streamableHttp"
+    },
+    "ov5BmWGblZkg5TrnCB40w": {
+      "name": "DogRAG",
+      "description": "DogRAG MCP server",
+      "baseUrl": "http://localhost:8867/mcp",
+      "isActive": true,
+      "type": "streamableHttp"
+    }
+  }
+}

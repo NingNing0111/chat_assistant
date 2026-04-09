@@ -1,0 +1,55 @@
+[package]
+name = "chat_assistant"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "chat_assistant"
+path = "src/lib.rs"
+
+[dependencies]
+# LLM + Tool
+rig-core = { version = "0.34.0", features = ["derive", "rmcp"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Environment
+dotenvy = "0.15"
+
+# HTTP client (for rig)
+reqwest = { version = "0.12", features = ["json"] }
+
+# Config
+config = "0.14"
+
+# Utils
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+tokio-stream = "0.1"
+futures = "0.3"
+async-stream = "0.3"
+
+# Audio processing - sherpa-onnx for ASR/TTS/WakeWord
+sherpa-onnx = { version = "1.10", default-features = false, features = ["static"] }
+cpal = "0.15"
+rodio = "0.19"
+
+# CLI arguments for examples
+clap = { version = "4", features = ["derive"], optional = true }
+
+[features]
+default = ["clap"]
+examples = ["clap"]

@@ -1,0 +1,8 @@
+/target
+models
+generated_tts.wav
+*.wav
+*.flac
+*.mp3
+.env
+.DS_Store
