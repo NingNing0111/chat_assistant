@@ -1,7 +1,6 @@
 /// TTS synthesizer using sherpa-onnx Kokoro
 ///
 /// Based on sherpa-onnx rust-api-examples/kokoro_tts_en.rs
-
 use sherpa_onnx::{
     GenerationConfig, OfflineTts, OfflineTtsConfig, OfflineTtsKokoroModelConfig,
 };
@@ -46,7 +45,7 @@ impl TtsSynthesizer {
         let tts = OfflineTts::create(&config)
             .ok_or_else(|| anyhow::anyhow!("Failed to create OfflineTts"))?;
 
-        let sample_rate = tts.sample_rate() as i32;
+        let sample_rate = tts.sample_rate();
         let num_speakers = tts.num_speakers();
 
         Ok(Self {

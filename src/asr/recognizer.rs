@@ -1,7 +1,6 @@
 /// Streaming ASR recognizer using sherpa-onnx OnlineRecognizer
 ///
 /// Based on sherpa-onnx rust-api-examples/streaming_zipformer_microphone.rs
-
 use cpal::traits::DeviceTrait;
 use cpal::{SampleFormat, Stream};
 use sherpa_onnx::{OnlineRecognizer, OnlineRecognizerConfig, OnlineStream};
@@ -17,7 +16,9 @@ pub enum AsrEvent {
 pub struct AsrRecognizer {
     recognizer: OnlineRecognizer,
     stream: OnlineStream,
+    #[allow(dead_code)]
     sample_rate: i32,
+    #[allow(dead_code)]
     chunk_size: usize,
 }
 
@@ -123,7 +124,7 @@ pub fn build_input_stream(
                         .map(|frame| frame.iter().copied().sum::<f32>() / channels as f32)
                         .collect()
                 };
-                let _ = on_audio.lock().unwrap()(mono);
+                on_audio.lock().unwrap()(mono);
             },
             err_fn,
             None,
@@ -144,7 +145,7 @@ pub fn build_input_stream(
                         })
                         .collect()
                 };
-                let _ = on_audio.lock().unwrap()(mono);
+                on_audio.lock().unwrap()(mono);
             },
             err_fn,
             None,

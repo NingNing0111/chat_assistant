@@ -1,11 +1,8 @@
 use crate::config::AppConfig;
-use crate::memory::MemoryStore;
-use crate::session::SessionManager;
 use crate::tts::TtsSynthesizer;
 use crate::wakeword::WakeWordDetector;
 use crate::asr::recognizer::AsrEvent;
 use crate::asr::AsrRecognizer;
-use crate::audio::{AudioCapture, AudioPlayer};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -22,28 +19,25 @@ pub enum AppState {
 pub struct App {
     config: AppConfig,
     state: Arc<RwLock<AppState>>,
-    session_manager: SessionManager,
-    memory_store: MemoryStore,
+    #[allow(dead_code)]
+    #[allow(clippy::arc_with_non_send_sync)]
     tts: Arc<RwLock<Option<TtsSynthesizer>>>,
+    #[allow(dead_code)]
+    #[allow(clippy::arc_with_non_send_sync)]
     asr: Arc<RwLock<Option<AsrRecognizer>>>,
+    #[allow(dead_code)]
+    #[allow(clippy::arc_with_non_send_sync)]
     wakeword: Arc<RwLock<Option<WakeWordDetector>>>,
-    continuous_mode: Arc<RwLock<bool>>,
 }
 
 impl App {
     pub async fn new(config: AppConfig) -> anyhow::Result<Self> {
-        let session_manager = SessionManager::new(config.session.max_history);
-        let memory_store = MemoryStore::new();
-
         Ok(Self {
             config,
             state: Arc::new(RwLock::new(AppState::Idle)),
-            session_manager,
-            memory_store,
             tts: Arc::new(RwLock::new(None)),
             asr: Arc::new(RwLock::new(None)),
             wakeword: Arc::new(RwLock::new(None)),
-            continuous_mode: Arc::new(RwLock::new(false)),
         })
     }
 
@@ -93,16 +87,6 @@ impl App {
         Ok(())
     }
 
-    /// Set continuous mode (no wake word needed)
-    pub async fn set_continuous_mode(&self, enabled: bool) {
-        *self.continuous_mode.write().await = enabled;
-    }
-
-    /// Check if continuous mode is enabled
-    pub async fn is_continuous_mode(&self) -> bool {
-        *self.continuous_mode.read().await
-    }
-
     /// Handle wake word detection
     pub async fn on_wake_word(&self) {
         let mut state = self.state.write().await;
@@ -124,7 +108,7 @@ impl App {
     }
 
     /// Process audio input through ASR
-    pub async fn process_audio(&self, samples: &[f32]) -> Option<String> {
+    pub async fn process_audio(&self, _samples: &[f32]) -> Option<String> {
         let state = self.state.read().await;
         if *state != AppState::Listening {
             return None;
@@ -168,10 +152,9 @@ impl App {
     }
 
     /// Run the main interaction loop
+    #[allow(dead_code)]
     pub async fn run(&self) -> anyhow::Result<()> {
-        let continuous = self.is_continuous_mode().await;
         println!("[App] Starting chat assistant...");
-        println!("[App] Continuous mode: {}", continuous);
 
         // Main loop would integrate with audio capture here
         // For now, just keep the app alive

@@ -1,6 +1,8 @@
 //! Chat Assistant Library
 //!
 //! A voice-interactive AI assistant using:
+
+#![allow(unused, clippy::arc_with_non_send_sync)]
 //! - rig for LLM and tool calling
 //! - sherpa-onnx for ASR, TTS, and wake word detection
 //! - cpal for audio capture

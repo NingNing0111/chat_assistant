@@ -58,6 +58,16 @@ impl ModelManager {
         }
     }
 
+    /// 清理嵌套目录残留（tar 解压可能产生多余层级）
+    pub fn cleanup_nested_dirs(&self) {
+        for dir in ["wakeword", "asr", "kokoro"] {
+            let dir_path = self.models_dir.join(dir);
+            if dir_path.exists() {
+                self.move_extracted_files(&dir_path).ok();
+            }
+        }
+    }
+
     fn check_dir(&self, dir: &str, files: &[&str]) -> bool {
         let dir_path = self.models_dir.join(dir);
         if !dir_path.exists() {
@@ -110,7 +120,7 @@ impl ModelManager {
         std::fs::create_dir_all(&dir_path)
             .context(format!("Failed to create directory: {:?}", dir_path))?;
 
-        let archive_name = url.split('/').last().unwrap();
+        let archive_name = url.split('/').next_back().unwrap();
         let archive_path = dir_path.join(archive_name);
 
         // 下载文件
@@ -136,11 +146,25 @@ impl ModelManager {
         println!("  Extracting...");
         self.extract_archive(&archive_path, &dir_path)?;
 
-        // 移动文件到根目录
+        // 移动文件到根目录（展平嵌套目录）
+        self.move_extracted_files(&dir_path)?;
+
+        // 再次清理残留嵌套（部分 tar 可能多层嵌套）
         self.move_extracted_files(&dir_path)?;
 
         // 删除压缩包
         std::fs::remove_file(&archive_path).ok();
+
+        // 验证文件存在
+        let files_ok = match dir {
+            "wakeword" => self.check_dir("wakeword", WAKEWORD_FILES),
+            "asr" => self.check_dir("asr", ASR_FILES),
+            "kokoro" => self.check_dir("kokoro", TTS_FILES),
+            _ => true,
+        };
+        if !files_ok {
+            anyhow::bail!("Model extraction failed: {} dir is missing required files", dir);
+        }
 
         Ok(())
     }
@@ -174,30 +198,56 @@ impl ModelManager {
 
     fn move_extracted_files(&self, dir_path: &Path) -> Result<()> {
         let entries = std::fs::read_dir(dir_path)?;
-        for entry in entries {
-            let entry = entry?;
-            let name = entry.file_name();
+        for entry in entries.flatten() {
             let src = entry.path();
-            let dst = dir_path.join(&name);
+            let name = entry.file_name();
 
-            // 跳过已经是文件的情况
-            if dst.exists() && dst.is_file() {
-                std::fs::remove_file(&src).ok();
+            // 跳过非目录（压缩包等已在调用者删除）
+            if !src.is_dir() {
                 continue;
             }
 
-            // 移动目录内容
-            if src.is_dir() && !name.to_string_lossy().starts_with('.') {
-                if let Ok(items) = std::fs::read_dir(&src) {
-                    for item in items.flatten() {
-                        let item_name = item.file_name();
-                        std::fs::rename(item.path(), dst.join(&item_name)).ok();
+            // 跳过隐藏目录
+            if name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+
+            // 移动目录内容到父目录
+            if let Ok(items) = std::fs::read_dir(&src) {
+                for item in items.flatten() {
+                    let item_path = item.path();
+                    let dst = dir_path.join(item.file_name());
+
+                    // copy + delete（Windows 跨目录 rename 会失败）
+                    if item_path.is_file() {
+                        std::fs::copy(&item_path, &dst)?;
+                        std::fs::remove_file(&item_path).ok();
+                    } else if item_path.is_dir() {
+                        Self::copy_dir_recursive(&item_path, &dst)?;
+                        std::fs::remove_dir_all(&item_path).ok();
                     }
                 }
-                std::fs::remove_dir(&src).ok();
             }
+
+            // 删除空目录
+            std::fs::remove_dir(&src).ok();
         }
 
+        Ok(())
+    }
+
+    fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
+        std::fs::create_dir_all(dst)?;
+        for entry in std::fs::read_dir(src)? {
+            let entry = entry?;
+            let src_path = entry.path();
+            let dst_path = dst.join(entry.file_name());
+            if src_path.is_dir() {
+                Self::copy_dir_recursive(&src_path, &dst_path)?;
+            } else {
+                std::fs::copy(&src_path, &dst_path)?;
+            }
+        }
         Ok(())
     }
 

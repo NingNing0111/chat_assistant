@@ -1,3 +1,5 @@
+#![allow(unused, clippy::arc_with_non_send_sync)]
+
 mod app;
 mod asr;
 mod audio;
@@ -85,8 +87,6 @@ async fn main() -> anyhow::Result<()> {
         println!("WakeWord detector initialized");
     }
 
-    app.set_continuous_mode(continuous_mode).await;
-
     let openai_client = if let Some(ref api_key) = config.llm.api_key {
         Client::builder()
             .api_key(api_key)
@@ -122,7 +122,7 @@ async fn main() -> anyhow::Result<()> {
     println!("\n[Main] Starting voice interaction loop...");
     println!("[Main] Press Ctrl+C to exit\n");
 
-    let sample_rate = config.asr.sample_rate as i32;
+    let sample_rate = config.asr.sample_rate;
     let chunk_size = config.asr.chunk_size;
 
     let mut wakeword_buffer: Vec<f32> = Vec::with_capacity(sample_rate as usize);

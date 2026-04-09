@@ -1,7 +1,6 @@
 /// Wake word detection using sherpa-onnx KeywordSpotter
 ///
 /// Based on sherpa-onnx rust-api-examples/keyword_spotter.rs
-
 use sherpa_onnx::{KeywordSpotter, KeywordSpotterConfig, Wave};
 use std::path::Path;
 
@@ -82,7 +81,7 @@ impl WakeWordDetector {
         let wave = Wave::read(&wav_path.to_string_lossy())
             .ok_or_else(|| anyhow::anyhow!("Failed to read WAV file: {}", wav_path.display()))?;
 
-        let sample_rate = wave.sample_rate() as i32;
+        let sample_rate = wave.sample_rate();
         let samples = wave.samples();
 
         Ok(self.process(samples, sample_rate))
