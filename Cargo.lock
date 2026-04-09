@@ -296,6 +296,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bzip2"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3a53fac24f34a81bc9954b5d6cfce0c21e18ec6959f44f56e8e90e4bb7c346c"
+dependencies = [
+ "libbz2-rs-sys",
+]
+
+[[package]]
 name = "bzip2-sys"
 version = "0.1.13+1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -350,11 +359,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-stream",
+ "bzip2 0.6.1",
  "chrono",
  "clap",
  "config",
  "cpal",
  "dotenvy",
+ "flate2",
  "futures",
  "reqwest 0.12.28",
  "rig-core",
@@ -362,6 +373,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sherpa-onnx",
+ "tar",
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
@@ -1518,6 +1530,12 @@ dependencies = [
  "ogg",
  "tinyvec",
 ]
+
+[[package]]
+name = "libbz2-rs-sys"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c4a545a15244c7d945065b5d392b2d2d7f21526fba56ce51467b06ed445e8f7"
 
 [[package]]
 name = "libc"
@@ -2772,7 +2790,7 @@ version = "1.12.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ad4bba2e3c5a8ff5b13dcc8f89cea942822276bde13c392dd74c2fa98344ab8"
 dependencies = [
- "bzip2",
+ "bzip2 0.4.4",
  "tar",
  "ureq",
 ]

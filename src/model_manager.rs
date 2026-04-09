@@ -68,40 +68,40 @@ impl ModelManager {
 
     /// 下载缺失的模型
     pub async fn download_missing(&self, status: &ModelStatus) -> Result<()> {
-        println!("\n📦 Model Check & Download");
+        println!("\nModel Check & Download");
         println!("{}", "-".repeat(50));
 
         if status.is_all_complete() {
-            println!("✅ All models are present!");
+            println!("All models are present!");
             return Ok(());
         }
 
-        println!("⚠️  Missing models detected, downloading...");
-        println!("   Missing: {}\n", status.missing().join(", "));
+        println!("Missing models detected, downloading...");
+        println!("Missing: {}\n", status.missing().join(", "));
 
         // 下载 ASR 模型 (最大)
         if !status.asr {
-            println!("↓ Downloading ASR model (中英文流式语音识别, ~487MB)...");
+            println!("Downloading ASR model (Chinese/English ASR, ~487MB)...");
             self.download_and_extract(ASR_MODEL_URL, "asr").await?;
         }
 
         // 下载 TTS 模型
         if !status.tts {
-            println!("\n↓ Downloading TTS model (Kokoro 中英文语音合成, ~333MB)...");
+            println!("\nDownloading TTS model (Kokoro TTS, ~333MB)...");
             self.download_and_extract(TTS_MODEL_URL, "kokoro").await?;
         }
 
         // 下载 WakeWord 模型
         if !status.wakeword {
-            println!("\n↓ Downloading WakeWord model (唤醒词检测, ~14MB)...");
+            println!("\nDownloading WakeWord model (~14MB)...");
             self.download_and_extract(WAKEWORD_MODEL_URL, "wakeword").await?;
             self.setup_wakeword_keywords().await?;
         }
 
-        // 创建符号链接
-        self.create_symlinks().await?;
+        // 创建符号链接或复制文件
+        self.create_shortcuts().await?;
 
-        println!("\n✅ All models downloaded successfully!");
+        println!("\nAll models downloaded successfully!");
         Ok(())
     }
 
@@ -134,18 +134,46 @@ impl ModelManager {
 
         // 解压
         println!("  Extracting...");
-        let process = std::process::Command::new("tar")
-            .args(["xjf", archive_path.to_str().unwrap()])
-            .current_dir(&dir_path)
-            .output()
-            .context("Failed to extract archive")?;
-
-        if !process.status.success() {
-            anyhow::bail!("Failed to extract archive");
-        }
+        self.extract_archive(&archive_path, &dir_path)?;
 
         // 移动文件到根目录
-        let entries = std::fs::read_dir(&dir_path)?;
+        self.move_extracted_files(&dir_path)?;
+
+        // 删除压缩包
+        std::fs::remove_file(&archive_path).ok();
+
+        Ok(())
+    }
+
+    fn extract_archive(&self, archive_path: &Path, dest_dir: &Path) -> Result<()> {
+        let file = std::fs::File::open(archive_path)
+            .context("Failed to open archive")?;
+        let file = std::io::BufReader::new(file);
+
+        // 根据扩展名选择解压方式
+        if archive_path.extension().map(|e| e == "bz2").unwrap_or(false) {
+            // 使用 bzip2 解压
+            let decoder = bzip2::bufread::BzDecoder::new(file);
+            let mut archive = tar::Archive::new(decoder);
+            archive.unpack(dest_dir)
+                .context("Failed to unpack tar.bz2 archive")?;
+        } else if archive_path.extension().map(|e| e == "gz").unwrap_or(false) {
+            let decoder = flate2::read::GzDecoder::new(file);
+            let mut archive = tar::Archive::new(decoder);
+            archive.unpack(dest_dir)
+                .context("Failed to unpack tar.gz archive")?;
+        } else {
+            // 尝试作为纯 tar 文件
+            let mut archive = tar::Archive::new(file);
+            archive.unpack(dest_dir)
+                .context("Failed to unpack tar archive")?;
+        }
+
+        Ok(())
+    }
+
+    fn move_extracted_files(&self, dir_path: &Path) -> Result<()> {
+        let entries = std::fs::read_dir(dir_path)?;
         for entry in entries {
             let entry = entry?;
             let name = entry.file_name();
@@ -170,9 +198,6 @@ impl ModelManager {
             }
         }
 
-        // 删除压缩包
-        std::fs::remove_file(&archive_path).ok();
-
         Ok(())
     }
 
@@ -188,47 +213,70 @@ impl ModelManager {
         Ok(())
     }
 
-    async fn create_symlinks(&self) -> Result<()> {
-        // WakeWord 符号链接
+    async fn create_shortcuts(&self) -> Result<()> {
+        // WakeWord 快捷方式
         let ww_dir = self.models_dir.join("wakeword");
-        if !ww_dir.join("encoder.onnx").exists() {
-            let encoder = ww_dir.join("encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx");
-            if encoder.exists() {
-                std::os::unix::fs::symlink(&encoder, ww_dir.join("encoder.onnx"))?;
-            }
-        }
-        if !ww_dir.join("decoder.onnx").exists() {
-            let decoder = ww_dir.join("decoder-epoch-12-avg-2-chunk-16-left-64.onnx");
-            if decoder.exists() {
-                std::os::unix::fs::symlink(&decoder, ww_dir.join("decoder.onnx"))?;
-            }
-        }
-        if !ww_dir.join("joiner.onnx").exists() {
-            let joiner = ww_dir.join("joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx");
-            if joiner.exists() {
-                std::os::unix::fs::symlink(&joiner, ww_dir.join("joiner.onnx"))?;
-            }
+        self.create_shortcut_if_needed(
+            &ww_dir,
+            "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+            "encoder.onnx",
+        )?;
+        self.create_shortcut_if_needed(
+            &ww_dir,
+            "decoder-epoch-12-avg-2-chunk-16-left-64.onnx",
+            "decoder.onnx",
+        )?;
+        self.create_shortcut_if_needed(
+            &ww_dir,
+            "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+            "joiner.onnx",
+        )?;
+
+        // ASR 快捷方式
+        let asr_dir = self.models_dir.join("asr");
+        self.create_shortcut_if_needed(
+            &asr_dir,
+            "encoder-epoch-99-avg-1.int8.onnx",
+            "encoder.onnx",
+        )?;
+        self.create_shortcut_if_needed(
+            &asr_dir,
+            "decoder-epoch-99-avg-1.onnx",
+            "decoder.onnx",
+        )?;
+        self.create_shortcut_if_needed(
+            &asr_dir,
+            "joiner-epoch-99-avg-1.int8.onnx",
+            "joiner.onnx",
+        )?;
+
+        Ok(())
+    }
+
+    fn create_shortcut_if_needed(&self, dir: &Path, source_name: &str, link_name: &str) -> Result<()> {
+        let link_path = dir.join(link_name);
+
+        // 如果快捷方式已存在，跳过
+        if link_path.exists() {
+            return Ok(());
         }
 
-        // ASR 符号链接
-        let asr_dir = self.models_dir.join("asr");
-        if !asr_dir.join("encoder.onnx").exists() {
-            let encoder = asr_dir.join("encoder-epoch-99-avg-1.int8.onnx");
-            if encoder.exists() {
-                std::os::unix::fs::symlink(&encoder, asr_dir.join("encoder.onnx"))?;
-            }
+        let source_path = dir.join(source_name);
+
+        // 如果源文件不存在，跳过
+        if !source_path.exists() {
+            return Ok(());
         }
-        if !asr_dir.join("decoder.onnx").exists() {
-            let decoder = asr_dir.join("decoder-epoch-99-avg-1.onnx");
-            if decoder.exists() {
-                std::os::unix::fs::symlink(&decoder, asr_dir.join("decoder.onnx"))?;
-            }
+
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&source_path, &link_path)?;
         }
-        if !asr_dir.join("joiner.onnx").exists() {
-            let joiner = asr_dir.join("joiner-epoch-99-avg-1.int8.onnx");
-            if joiner.exists() {
-                std::os::unix::fs::symlink(&joiner, asr_dir.join("joiner.onnx"))?;
-            }
+
+        #[cfg(windows)]
+        {
+            // Windows 上复制文件作为替代
+            std::fs::copy(&source_path, &link_path)?;
         }
 
         Ok(())

@@ -42,6 +42,11 @@ tokio-stream = "0.1"
 futures = "0.3"
 async-stream = "0.3"
 
+# Archive extraction (cross-platform)
+bzip2 = "0.6"
+flate2 = "1"
+tar = "0.4"
+
 # Audio processing - sherpa-onnx for ASR/TTS/WakeWord
 sherpa-onnx = { version = "1.10", default-features = false, features = ["static"] }
 cpal = "0.15"
