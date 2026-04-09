@@ -33,6 +33,8 @@ impl TtsSynthesizer {
                     tokens: tokens_path.map(|p| p.to_string_lossy().into_owned()),
                     data_dir: data_dir.map(|p| p.to_string_lossy().into_owned()),
                     length_scale: 1.0 / speed,
+                    // Kokoro multi-lingual v1.0+ 需要指定语言
+                    lang: Some("zh".to_string()),
                     ..Default::default()
                 },
                 num_threads: 2,
