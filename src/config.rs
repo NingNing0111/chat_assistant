@@ -76,20 +76,16 @@ pub struct WakeWordConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TtsConfig {
-    /// TTS model type (kokoro, etc.)
-    pub model_type: String,
-    /// Path to TTS model
-    pub model: PathBuf,
-    /// Path to voices file (for Kokoro)
-    pub voices: Option<PathBuf>,
-    /// Path to tokens file (for Kokoro)
-    pub tokens: Option<PathBuf>,
-    /// Path to espeak-ng data dir (for Kokoro)
-    pub data_dir: Option<PathBuf>,
+    /// MiniMax API key (or set MINIMAX_API_KEY env var)
+    pub api_key: Option<String>,
+    /// Model name (e.g., "speech-2.8-hd")
+    pub model: String,
+    /// Voice ID (e.g., "male-qn-qingse")
+    pub voice_id: String,
     /// Speech rate (0.5 - 2.0)
     pub speed: f32,
-    /// Speaker ID
-    pub speaker_id: usize,
+    /// Sample rate (default 32000)
+    pub sample_rate: i32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -149,13 +145,11 @@ impl Default for AppConfig {
                 wake_word: "玉米糊".into(),
             },
             tts: TtsConfig {
-                model_type: "kokoro".into(),
-                model: PathBuf::from("./models/kokoro/model.onnx"),
-                voices: Some(PathBuf::from("./models/kokoro/voices.bin")),
-                tokens: Some(PathBuf::from("./models/kokoro/tokens.txt")),
-                data_dir: Some(PathBuf::from("./models/kokoro/espeak-ng-data")),
+                api_key: None,
+                model: "speech-2.8-hd".into(),
+                voice_id: "male-qn-qingse".into(),
                 speed: 1.0,
-                speaker_id: 0,
+                sample_rate: 32000,
             },
             tools: ToolsConfig {
                 mcp_config: None,
@@ -201,6 +195,19 @@ impl AppConfig {
         }
         if let Ok(mcp_config) = std::env::var("MCP_CONFIG") {
             config.tools.mcp_config = Some(PathBuf::from(mcp_config));
+        }
+        // MiniMax TTS config
+        if let Ok(api_key) = std::env::var("MINIMAX_API_KEY") {
+            config.tts.api_key = Some(api_key);
+        }
+        if let Ok(model) = std::env::var("MINIMAX_TTS_MODEL") {
+            config.tts.model = model;
+        }
+        if let Ok(voice_id) = std::env::var("MINIMAX_TTS_VOICE") {
+            config.tts.voice_id = voice_id;
+        }
+        if let Ok(speed) = std::env::var("MINIMAX_TTS_SPEED") {
+            config.tts.speed = speed.parse().unwrap_or(1.0);
         }
 
         Ok(config)

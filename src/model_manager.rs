@@ -2,12 +2,12 @@
 //!
 //! 首次启动时自动检测并下载缺失的模型文件
 
-use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
+use std::path::{Path, PathBuf};
 
-const WAKEWORD_MODEL_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01-mobile.tar.bz2";
+const WAKEWORD_MODEL_URL: &str =
+    "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01-mobile.tar.bz2";
 const ASR_MODEL_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2";
-const TTS_MODEL_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2";
 
 const WAKEWORD_FILES: &[&str] = &[
     "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
@@ -21,12 +21,6 @@ const ASR_FILES: &[&str] = &[
     "encoder-epoch-99-avg-1.int8.onnx",
     "decoder-epoch-99-avg-1.onnx",
     "joiner-epoch-99-avg-1.int8.onnx",
-    "tokens.txt",
-];
-
-const TTS_FILES: &[&str] = &[
-    "model.onnx",
-    "voices.bin",
     "tokens.txt",
 ];
 
@@ -49,18 +43,16 @@ impl ModelManager {
     pub fn check_models(&self) -> ModelStatus {
         let wakeword_ok = self.check_dir("wakeword", WAKEWORD_FILES);
         let asr_ok = self.check_dir("asr", ASR_FILES);
-        let tts_ok = self.check_dir("kokoro", TTS_FILES);
 
         ModelStatus {
             wakeword: wakeword_ok,
             asr: asr_ok,
-            tts: tts_ok,
         }
     }
 
     /// 清理嵌套目录残留（tar 解压可能产生多余层级）
     pub fn cleanup_nested_dirs(&self) {
-        for dir in ["wakeword", "asr", "kokoro"] {
+        for dir in ["wakeword", "asr"] {
             let dir_path = self.models_dir.join(dir);
             if dir_path.exists() {
                 self.move_extracted_files(&dir_path).ok();
@@ -95,12 +87,6 @@ impl ModelManager {
             self.download_and_extract(ASR_MODEL_URL, "asr").await?;
         }
 
-        // 下载 TTS 模型
-        if !status.tts {
-            println!("\nDownloading TTS model (Kokoro TTS, ~333MB)...");
-            self.download_and_extract(TTS_MODEL_URL, "kokoro").await?;
-        }
-
         // 下载 WakeWord 模型
         if !status.wakeword {
             println!("\nDownloading WakeWord model (~14MB)...");
@@ -127,20 +113,15 @@ impl ModelManager {
         println!("  Downloading {}...", archive_name);
 
         let client = reqwest::Client::new();
-        let response = client.get(url)
-            .send()
-            .await
-            .context("Failed to download model")?;
+        let response = client.get(url).send().await.context("Failed to download model")?;
 
         let total_size = response.content_length().unwrap_or(0);
         println!("  Total size: {:.1} MB", total_size as f64 / 1024.0 / 1024.0);
 
-        let bytes = response.bytes().await
-            .context("Failed to read response body")?;
+        let bytes = response.bytes().await.context("Failed to read response body")?;
 
         println!("  Saving...");
-        std::fs::write(&archive_path, &bytes)
-            .context("Failed to save archive")?;
+        std::fs::write(&archive_path, &bytes).context("Failed to save archive")?;
 
         // 解压
         println!("  Extracting...");
@@ -159,7 +140,6 @@ impl ModelManager {
         let files_ok = match dir {
             "wakeword" => self.check_dir("wakeword", WAKEWORD_FILES),
             "asr" => self.check_dir("asr", ASR_FILES),
-            "kokoro" => self.check_dir("kokoro", TTS_FILES),
             _ => true,
         };
         if !files_ok {
@@ -170,27 +150,35 @@ impl ModelManager {
     }
 
     fn extract_archive(&self, archive_path: &Path, dest_dir: &Path) -> Result<()> {
-        let file = std::fs::File::open(archive_path)
-            .context("Failed to open archive")?;
+        let file = std::fs::File::open(archive_path).context("Failed to open archive")?;
         let file = std::io::BufReader::new(file);
 
         // 根据扩展名选择解压方式
-        if archive_path.extension().map(|e| e == "bz2").unwrap_or(false) {
+        if archive_path
+            .extension()
+            .map(|e| e == "bz2")
+            .unwrap_or(false)
+        {
             // 使用 bzip2 解压
             let decoder = bzip2::bufread::BzDecoder::new(file);
             let mut archive = tar::Archive::new(decoder);
-            archive.unpack(dest_dir)
+            archive
+                .unpack(dest_dir)
                 .context("Failed to unpack tar.bz2 archive")?;
-        } else if archive_path.extension().map(|e| e == "gz").unwrap_or(false) {
+        } else if archive_path
+            .extension()
+            .map(|e| e == "gz")
+            .unwrap_or(false)
+        {
             let decoder = flate2::read::GzDecoder::new(file);
             let mut archive = tar::Archive::new(decoder);
-            archive.unpack(dest_dir)
+            archive
+                .unpack(dest_dir)
                 .context("Failed to unpack tar.gz archive")?;
         } else {
             // 尝试作为纯 tar 文件
             let mut archive = tar::Archive::new(file);
-            archive.unpack(dest_dir)
-                .context("Failed to unpack tar archive")?;
+            archive.unpack(dest_dir).context("Failed to unpack tar archive")?;
         }
 
         Ok(())
@@ -303,7 +291,12 @@ impl ModelManager {
         Ok(())
     }
 
-    fn create_shortcut_if_needed(&self, dir: &Path, source_name: &str, link_name: &str) -> Result<()> {
+    fn create_shortcut_if_needed(
+        &self,
+        dir: &Path,
+        source_name: &str,
+        link_name: &str,
+    ) -> Result<()> {
         let link_path = dir.join(link_name);
 
         // 如果快捷方式已存在，跳过
@@ -337,19 +330,21 @@ impl ModelManager {
 pub struct ModelStatus {
     pub wakeword: bool,
     pub asr: bool,
-    pub tts: bool,
 }
 
 impl ModelStatus {
     pub fn is_all_complete(&self) -> bool {
-        self.wakeword && self.asr && self.tts
+        self.wakeword && self.asr
     }
 
     pub fn missing(&self) -> Vec<&'static str> {
         let mut missing = Vec::new();
-        if !self.wakeword { missing.push("WakeWord"); }
-        if !self.asr { missing.push("ASR"); }
-        if !self.tts { missing.push("TTS"); }
+        if !self.wakeword {
+            missing.push("WakeWord");
+        }
+        if !self.asr {
+            missing.push("ASR");
+        }
         missing
     }
 }

@@ -1,8 +1,8 @@
-use crate::config::AppConfig;
-use crate::tts::TtsSynthesizer;
-use crate::wakeword::WakeWordDetector;
 use crate::asr::recognizer::AsrEvent;
 use crate::asr::AsrRecognizer;
+use crate::config::AppConfig;
+use crate::tts::MiniMaxTtsHandler;
+use crate::wakeword::WakeWordDetector;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -21,7 +21,7 @@ pub struct App {
     state: Arc<RwLock<AppState>>,
     #[allow(dead_code)]
     #[allow(clippy::arc_with_non_send_sync)]
-    tts: Arc<RwLock<Option<TtsSynthesizer>>>,
+    tts: Arc<RwLock<Option<MiniMaxTtsHandler>>>,
     #[allow(dead_code)]
     #[allow(clippy::arc_with_non_send_sync)]
     asr: Arc<RwLock<Option<AsrRecognizer>>>,
@@ -43,14 +43,16 @@ impl App {
 
     /// Initialize TTS
     pub async fn init_tts(&self) -> anyhow::Result<()> {
-        let synthesizer = TtsSynthesizer::new_kokoro(
-            &self.config.tts.model,
-            self.config.tts.voices.as_deref(),
-            self.config.tts.tokens.as_deref(),
-            self.config.tts.data_dir.as_deref(),
+        let api_key = self.config.tts.api_key.clone()
+            .ok_or_else(|| anyhow::anyhow!("MINIMAX_API_KEY not set"))?;
+
+        let synthesizer = MiniMaxTtsHandler::new(
+            api_key,
+            self.config.tts.model.clone(),
+            self.config.tts.voice_id.clone(),
             self.config.tts.speed,
-            self.config.tts.speaker_id,
-        )?;
+            self.config.tts.sample_rate,
+        );
 
         *self.tts.write().await = Some(synthesizer);
         Ok(())
@@ -137,7 +139,7 @@ impl App {
     }
 
     /// Get TTS guard
-    pub async fn tts(&self) -> tokio::sync::RwLockReadGuard<'_, Option<TtsSynthesizer>> {
+    pub async fn tts(&self) -> tokio::sync::RwLockReadGuard<'_, Option<MiniMaxTtsHandler>> {
         self.tts.read().await
     }
 

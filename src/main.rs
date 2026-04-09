@@ -90,7 +90,13 @@ async fn main() -> anyhow::Result<()> {
     let openai_client = if let Some(ref api_key) = config.llm.api_key {
         Client::builder()
             .api_key(api_key)
-            .base_url(config.llm.base_url.as_deref().unwrap_or("https://api.openai.com/v1"))
+            .base_url(
+                config
+                    .llm
+                    .base_url
+                    .as_deref()
+                    .unwrap_or("https://api.openai.com/v1"),
+            )
             .build()
             .map_err(|e| anyhow::anyhow!("Failed to build client: {}", e))?
     } else {
@@ -166,10 +172,10 @@ async fn main() -> anyhow::Result<()> {
                             match agent.prompt(&text).await {
                                 Ok(response) => {
                                     println!("[Assistant] {}", response);
-                                    
+
                                     let tts_guard = app.tts().await;
                                     if let Some(ref tts) = *tts_guard {
-                                        if let Ok(audio_data) = tts.synthesize(&response) {
+                                        if let Ok(audio_data) = tts.synthesize(&response).await {
                                             drop(tts_guard);
                                             playback_tx.send(audio_data).ok();
                                         }
@@ -195,7 +201,10 @@ async fn main() -> anyhow::Result<()> {
         }
 
         if wakeword_buffer.len() > sample_rate as usize * 2 {
-            wakeword_buffer = wakeword_buffer.into_iter().skip(sample_rate as usize).collect();
+            wakeword_buffer = wakeword_buffer
+                .into_iter()
+                .skip(sample_rate as usize)
+                .collect();
         }
     }
 

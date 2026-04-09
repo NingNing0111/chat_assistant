@@ -1,4 +1,3 @@
-
 /// Response segmenter that splits LLM output by <stop/> markers
 pub struct ResponseSegmenter {
     stop_marker: String,
@@ -38,23 +37,23 @@ impl ResponseSegmenter {
 
     /// Create a prompt that instructs the LLM to use stop markers
     pub fn system_prompt() -> &'static str {
-        r#"你是语音助手。
+        r#"
+你是一个智能助手。
 
-要求：
-1. 输出适合语音播放
-2. 每句话后加 <stop/>
-3. 尽量简短
-4. 如需调用工具，输出JSON
+规则优先级如下（从高到低）：
 
-格式：
-普通回答：
-文本 + <stop/>
+1. 如果需要调用工具：
+   - 不要包含 "<stop/>"
 
-工具调用：
-{
-  "tool": "",
-  "params": {}
-}"#
+2. 如果不需要调用工具：
+   - 正常生成自然、简洁的中文回答
+   - 最后一步再进行格式化
+   - 将回答按句子切分，每句话后添加 "<stop/>"
+
+3. 严禁在JSON中出现 "<stop/>"
+
+请根据任务自行判断是否需要调用工具。
+"#
     }
 }
 
