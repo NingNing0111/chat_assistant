@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo run:*)",
+      "Bash(xxd \"D:\\\\Code\\\\GithubProject\\\\chat_assistant\\\\models\\\\wakeword\\\\tokens.txt\")",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/master/sherpa-onnx/csrc/utils.cc\")",
+      "Bash(xxd \"D:\\\\Code\\\\GithubProject\\\\chat_assistant\\\\models\\\\wakeword\\\\test_keywords.txt\")",
+      "Bash(rtk git:*)"
+    ]
+  }
+}
