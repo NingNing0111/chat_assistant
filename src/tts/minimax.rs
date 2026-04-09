@@ -41,6 +41,10 @@ impl MiniMaxTtsHandler {
     }
 
     /// Stream audio chunks from MiniMax HTTP API (streaming mode)
+    ///
+    /// Collects all hex audio data first, then decodes to samples.
+    /// Returns a single chunk with all samples (true streaming would require
+    /// a streaming MP3 decoder like lowlvl or symphonia).
     pub fn synthesize_streaming<'a>(&'a self, text: &'a str) -> impl StreamExt<Item = Result<Vec<f32>>> + 'a {
         let client = self.client.clone();
         let api_key = self.api_key.clone();
@@ -84,6 +88,8 @@ impl MiniMaxTtsHandler {
                 return;
             }
 
+            // Collect all hex audio data
+            let mut all_hex = String::new();
             let mut stream = response.bytes_stream();
 
             while let Some(chunk_result) = stream.next().await {
@@ -107,30 +113,18 @@ impl MiniMaxTtsHandler {
                                             }
                                         }
 
-                                        // Extract audio chunk
+                                        // Collect audio hex
                                         if let Some(audio_hex) = response
                                             .get("data")
                                             .and_then(|d| d.get("audio"))
                                             .and_then(|a| a.as_str())
                                         {
-                                            if !audio_hex.is_empty() {
-                                                match hex::decode(audio_hex) {
-                                                    Ok(audio_data) => {
-                                                        let samples = decode_mp3_chunk(&audio_data);
-                                                        if !samples.is_empty() {
-                                                            yield Ok(samples);
-                                                        }
-                                                    }
-                                                    Err(e) => {
-                                                        tracing::warn!("Failed to decode audio hex: {}", e);
-                                                    }
-                                                }
-                                            }
+                                            all_hex.push_str(audio_hex);
                                         }
 
                                         // Check if this is the final chunk
                                         if response.get("data").and_then(|d| d.get("status")).and_then(|s| s.as_i64()) == Some(2) {
-                                            return;
+                                            break;
                                         }
                                     }
                                 }
@@ -140,6 +134,21 @@ impl MiniMaxTtsHandler {
                     Err(e) => {
                         yield Err(anyhow::anyhow!("Stream error: {}", e));
                         return;
+                    }
+                }
+            }
+
+            // Decode all at once
+            if !all_hex.is_empty() {
+                match hex::decode(&all_hex) {
+                    Ok(audio_data) => {
+                        let samples = decode_mp3_all(&audio_data);
+                        if !samples.is_empty() {
+                            yield Ok(samples);
+                        }
+                    }
+                    Err(e) => {
+                        yield Err(anyhow::anyhow!("Failed to decode audio hex: {}", e));
                     }
                 }
             }
@@ -215,7 +224,7 @@ impl MiniMaxTtsHandler {
 
     /// Decode MP3 bytes to f32 samples
     fn decode_mp3(&self, mp3_data: &[u8]) -> Result<Vec<f32>> {
-        Ok(decode_mp3_chunk(mp3_data))
+        Ok(decode_mp3_all(mp3_data))
     }
 
     /// Get sample rate
@@ -225,7 +234,7 @@ impl MiniMaxTtsHandler {
 }
 
 /// Decode MP3 bytes to f32 samples (helper function)
-fn decode_mp3_chunk(mp3_data: &[u8]) -> Vec<f32> {
+fn decode_mp3_all(mp3_data: &[u8]) -> Vec<f32> {
     if mp3_data.is_empty() {
         return Vec::new();
     }
