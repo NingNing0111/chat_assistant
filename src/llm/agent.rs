@@ -1,7 +1,10 @@
 use anyhow::Result;
+use async_stream::stream;
+use futures_util::StreamExt;
 use rig::client::{CompletionClient, ProviderClient};
 use rig::completion::Prompt;
 use rig::providers::openai::Client;
+use rig::streaming::StreamingPrompt;
 
 use super::response::ResponseSegmenter;
 
@@ -9,7 +12,7 @@ use super::response::ResponseSegmenter;
 pub struct LlmAgent {
     client: Client,
     model: String,
-    segmenter: ResponseSegmenter,
+    preamble: String,
 }
 
 impl LlmAgent {
@@ -30,31 +33,64 @@ impl LlmAgent {
             Client::from_env()
         };
 
-        let _agent = client.agent(model).preamble(preamble).build();
-
         Ok(Self {
             client,
             model: model.to_string(),
-            segmenter: ResponseSegmenter::new(),
+            preamble: preamble.to_string(),
         })
     }
 
-    /// Prompt the agent and get a response
+    /// Prompt the agent and get a response (non-streaming)
     pub async fn prompt(&self, text: &str) -> Result<String> {
-        let agent = self.client.agent(&self.model).build();
+        let agent = self
+            .client
+            .agent(&self.model)
+            .preamble(&self.preamble)
+            .build();
         let response = agent.prompt(text).await?;
         Ok(response)
     }
 
-    /// Get response segments from the LLM
-    pub async fn stream_segments(&self, text: &str) -> Result<Vec<String>> {
-        let response = self.prompt(text).await?;
-        let segments = self.segmenter.segment(&response);
-        Ok(segments)
+    /// Stream response tokens one by one
+    pub fn stream_tokens(&self, text: String) -> impl StreamExt<Item = Result<String>> + '_ {
+        let client = self.client.clone();
+        let model = self.model.clone();
+        let preamble = self.preamble.clone();
+
+        stream! {
+            let agent = client.agent(&model).preamble(&preamble).build();
+
+            let mut stream = agent.stream_prompt(text).await;
+
+            while let Some(result) = stream.next().await {
+                match result {
+                    Ok(chunk) => {
+                        use rig::agent::MultiTurnStreamItem;
+                        use rig::streaming::StreamedAssistantContent;
+                        match chunk {
+                            MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Text(t)) => {
+                                println!("{:?}", t.text);
+                                yield Ok(t.text);
+                            }
+                            MultiTurnStreamItem::StreamAssistantItem(StreamedAssistantContent::Final(_)) => {
+                                // Stream complete
+                            }
+                            _ => {
+                                // Ignore tool calls, reasoning, etc. for TTS
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        yield Err(anyhow::anyhow!("Stream error: {}", e));
+                        break;
+                    }
+                }
+            }
+        }
     }
 
-    /// Get the response segmenter
-    pub fn segmenter(&self) -> &ResponseSegmenter {
-        &self.segmenter
+    /// Get response segmenter (for backward compatibility)
+    pub fn segmenter(&self) -> ResponseSegmenter {
+        ResponseSegmenter::new()
     }
 }

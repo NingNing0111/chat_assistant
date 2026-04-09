@@ -44,6 +44,11 @@ impl AudioPlayer {
 
     /// Clear queue
     pub fn clear_queue(&self) { self.sink.clear(); }
+
+    /// Wait for playback to finish
+    pub fn wait(&self) {
+        self.sink.sleep_until_end();
+    }
 }
 
 impl Default for AudioPlayer {
