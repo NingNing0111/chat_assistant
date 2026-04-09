@@ -1,2 +1,2 @@
-pub mod synthesizer;
-pub use synthesizer::TtsSynthesizer;
+pub mod minimax;
+pub use minimax::MiniMaxTtsHandler;

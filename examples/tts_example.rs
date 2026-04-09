@@ -1,80 +1,118 @@
-//! TTS Example - 测试 Kokoro TTS 语音合成
+//! MiniMax TTS Example
 //!
-//! 运行: cargo run --example tts_example
+//! Demonstrates text-to-speech synthesis using MiniMax WebSocket API.
+//!
+//! Usage:
+//!     cargo run --example tts_example -- "要合成的文本"
+//!
+//! Environment variables:
+//!     MINIMAX_API_KEY - Your MiniMax API key (required)
+//!     MINIMAX_TTS_MODEL - Model name (default: speech-2.8-hd)
+//!     MINIMAX_TTS_VOICE - Voice ID (default: male-qn-qingse)
+//!     MINIMAX_TTS_SPEED - Speech speed (default: 1.0)
 
-use sherpa_onnx::{GenerationConfig, OfflineTts, OfflineTtsConfig, OfflineTtsKokoroModelConfig};
-use std::io::Write;
-use std::time::Instant;
+use chat_assistant::tts::MiniMaxTtsHandler;
+use std::env;
 
-fn main() {
-    let model_dir = "./models/kokoro";
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
+    // Initialize logging
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .with_target(false)
+        .init();
 
-    println!("Loading TTS model from: {}", model_dir);
+    // Get API key from environment
+    let api_key =
+        env::var("MINIMAX_API_KEY").expect("MINIMAX_API_KEY environment variable not set");
 
-    let config = OfflineTtsConfig {
-        model: sherpa_onnx::OfflineTtsModelConfig {
-            kokoro: OfflineTtsKokoroModelConfig {
-                model: Some(format!("{}/model.onnx", model_dir).into()),
-                voices: Some(format!("{}/voices.bin", model_dir).into()),
-                tokens: Some(format!("{}/tokens.txt", model_dir).into()),
-                data_dir: Some(format!("{}/espeak-ng-data", model_dir).into()),
-                dict_dir: Some(format!("{}/dict", model_dir).into()),
-                lexicon: Some(format!(
-                    "{}/lexicon-us-en.txt,{}/lexicon-zh.txt",
-                    model_dir, model_dir
-                ).into()),
-                length_scale: 1.0,
-                ..Default::default()
-            },
-            num_threads: 4,
-            debug: true,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
+    // Optional configuration from environment
+    let model = env::var("MINIMAX_TTS_MODEL").unwrap_or_else(|_| "speech-2.8-hd".to_string());
+    let voice_id = env::var("MINIMAX_TTS_VOICE").unwrap_or_else(|_| "male-qn-qingse".to_string());
+    let speed: f32 = env::var("MINIMAX_TTS_SPEED")
+        .unwrap_or_else(|_| "1.0".to_string())
+        .parse()
+        .unwrap_or(1.0);
+    let sample_rate = 32000;
 
-    let tts = OfflineTts::create(&config).expect("Failed to create OfflineTts");
+    // Get text from command line arguments
+    let text = env::args()
+        .nth(1)
+        .expect("Usage: cargo run --example tts_example -- \"Your text here\"");
 
-    println!("Sample rate: {}", tts.sample_rate());
-    println!("Num speakers: {}", tts.num_speakers());
+    println!("MiniMax TTS Example");
+    println!("===================");
+    println!("Model: {}", model);
+    println!("Voice: {}", voice_id);
+    println!("Speed: {}", speed);
+    println!("Sample rate: {}", sample_rate);
+    println!();
+    println!("Synthesizing: {}", text);
+    println!();
 
-    // 测试文本
-    let text = "你好！这是中文语音合成测试。Hello! This is English speech synthesis test. 玉米糊!";
+    // Create TTS handler
+    let handler = MiniMaxTtsHandler::new(api_key, model, voice_id, speed, sample_rate);
 
-    let gen_config = GenerationConfig {
-        sid: 0,
-        speed: 1.0,
-        ..Default::default()
-    };
+    // Synthesize speech
+    println!("Connecting to MiniMax API...");
+    let samples = handler.synthesize(&text).await?;
+    println!("Received {} audio samples", samples.len());
 
-    println!("\nSynthesizing: {}\n", text);
+    // Calculate audio duration
+    let duration_secs = samples.len() as f32 / sample_rate as f32;
+    println!("Audio duration: {:.2} seconds", duration_secs);
 
-    let start = Instant::now();
+    // Save to WAV file for playback
+    let output_path = "tts_output.wav";
+    save_wav(&samples, sample_rate, output_path)?;
+    println!("Audio saved to: {}", output_path);
 
-    let audio = tts
-        .generate_with_config(
-            text,
-            &gen_config,
-            Some(|_samples: &[f32], progress: f32| -> bool {
-                print!("\rProgress: {:.1}%", progress * 100.0);
-                std::io::stdout().flush().unwrap();
-                true
-            }),
-        )
-        .expect("Generation failed");
+    Ok(())
+}
 
-    println!("\n\nDone!");
+/// Save audio samples as a WAV file
+fn save_wav(samples: &[f32], sample_rate: i32, path: &str) -> anyhow::Result<()> {
+    use std::fs::File;
+    use std::io::Write;
 
-    let elapsed_seconds = start.elapsed().as_secs_f32();
-    let duration = audio.samples().len() as f32 / audio.sample_rate() as f32;
-    let rtf = elapsed_seconds / duration;
-
-    println!("Elapsed: {:.3}s, Duration: {:.3}s, RTF: {:.3}", elapsed_seconds, duration, rtf);
-
-    let filename = "generated_tts.wav";
-    if audio.save(filename) {
-        println!("Saved to: {}", filename);
-    } else {
-        eprintln!("Failed to save {}", filename);
+    if samples.is_empty() {
+        anyhow::bail!("No samples to save");
     }
+
+    let num_channels = 1;
+    let bits_per_sample = 16;
+    let byte_rate = sample_rate * num_channels * bits_per_sample / 8;
+    let block_align = num_channels * bits_per_sample / 8;
+    let data_size = samples.len() * 2; // i16 = 2 bytes
+
+    let mut file = File::create(path)?;
+
+    // RIFF header
+    file.write_all(b"RIFF")?;
+    file.write_all(&(36 + data_size as u32).to_le_bytes())?;
+    file.write_all(b"WAVE")?;
+
+    // fmt chunk
+    file.write_all(b"fmt ")?;
+    file.write_all(&16u32.to_le_bytes())?; // chunk size
+    file.write_all(&1u16.to_le_bytes())?; // audio format (PCM)
+    file.write_all(&num_channels.to_le_bytes())?;
+    file.write_all(&sample_rate.to_le_bytes())?;
+    file.write_all(&byte_rate.to_le_bytes())?;
+    file.write_all(&block_align.to_le_bytes())?;
+    file.write_all(&bits_per_sample.to_le_bytes())?;
+
+    // data chunk
+    file.write_all(b"data")?;
+    file.write_all(&(data_size as u32).to_le_bytes())?;
+
+    // Convert f32 samples to i16 and write
+    for &sample in samples {
+        let clipped = sample.max(-1.0).min(1.0);
+        let int_sample = (clipped * i16::MAX as f32) as i16;
+        file.write_all(&int_sample.to_le_bytes())?;
+    }
+
+    Ok(())
 }
